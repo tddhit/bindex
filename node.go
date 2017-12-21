@@ -6,7 +6,7 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/tddhit/bindex/util"
+	"github.com/tddhit/tools/log"
 )
 
 type node struct {
@@ -24,12 +24,12 @@ func (n node) dump() {
 	if n.isLeaf {
 		typ = "leaf"
 	}
-	util.LogDebugf("[NODE %d {type=%s count=%d size=%d}]", n.pgid, typ, len(n.inodes), n.size())
+	log.Debugf("[NODE %d {type=%s count=%d size=%d}]", n.pgid, typ, len(n.inodes), n.size())
 	for _, item := range n.inodes {
 		if n.isLeaf {
-			util.LogDebugf("+L %s -> %s", item.key, item.value)
+			log.Debugf("+L %s -> %s", item.key, item.value)
 		} else {
-			util.LogDebugf("+B %s -> %d", item.key, item.pgid)
+			log.Debugf("+B %s -> %d", item.key, item.pgid)
 		}
 	}
 }
@@ -100,9 +100,9 @@ func (n *node) prevSibling() *node {
 	if index == 0 {
 		return nil
 	}
-	util.LogDebug(n.parent)
-	util.LogDebug(n)
-	util.LogDebug(index)
+	log.Debug(n.parent)
+	log.Debug(n)
+	log.Debug(index)
 	return n.parent.childAt(index - 1)
 }
 
@@ -140,9 +140,9 @@ func (n *node) splitIndex() (index int) {
 }
 
 func (n *node) rebalanceAfterInsert() {
-	util.LogDebug("-------rebalance start-----------", n)
+	log.Debug("-------rebalance start-----------", n)
 	if n.sizeLessThan(n.bindex.pageSize) {
-		util.LogDebug("AfterInsert return!", "size:", n.size)
+		log.Debug("AfterInsert return!", "size:", n.size)
 		return
 	}
 	splitIndex := n.splitIndex()
@@ -197,7 +197,7 @@ func (n *node) rebalanceAfterInsert() {
 	n.bindex.uncommited[n.pgid] = n
 	n.bindex.uncommited[next.pgid] = next
 	n.bindex.uncommited[n.parent.pgid] = n.parent
-	util.LogDebug("-----------------------rebalance end--------------------")
+	log.Debug("-----------------------rebalance end--------------------")
 	n.parent.rebalanceAfterInsert()
 }
 
@@ -206,23 +206,23 @@ func (n *node) del(key []byte) {
 	if index >= len(n.inodes) || !bytes.Equal(n.inodes[index].key, key) {
 		return
 	}
-	util.LogDebug(n.pgid, " del ", n.inodes[index].pgid, string(key))
+	log.Debug(n.pgid, " del ", n.inodes[index].pgid, string(key))
 	n.inodes = append(n.inodes[:index], n.inodes[index+1:]...)
 	n.bindex.uncommited[n.pgid] = n
 	n.dump()
 }
 
 func (n *node) rebalanceAfterDelete() {
-	util.LogDebug("-----------------------rebalance start------", n)
+	log.Debug("-----------------------rebalance start------", n)
 	var threshold = n.bindex.pageSize / 2
 	if !n.sizeLessThan(threshold) && len(n.inodes) > n.minKeys() {
-		util.LogDebug("AfterDelete return!", "pgid:", n.pgid, "size:", n.size(), "inodes:", len(n.inodes))
+		log.Debug("AfterDelete return!", "pgid:", n.pgid, "size:", n.size(), "inodes:", len(n.inodes))
 		return
 	}
 	if n.parent == nil {
-		util.LogDebug("n.parent == nil return")
+		log.Debug("n.parent == nil return")
 		if !n.isLeaf && len(n.inodes) == 1 {
-			util.LogDebug("root.inodes=1")
+			log.Debug("root.inodes=1")
 			child := n.bindex.node(n.inodes[0].pgid, n)
 			n.isLeaf = child.isLeaf
 			n.inodes = child.inodes[:]
@@ -237,16 +237,16 @@ func (n *node) rebalanceAfterDelete() {
 			delete(n.bindex.uncommited, child.pgid)
 			n.bindex.uncommited[n.pgid] = n
 		}
-		util.LogDebug("-----------------------rebalance end--------------------")
+		log.Debug("-----------------------rebalance end--------------------")
 		return
 	}
 	if len(n.inodes) == 0 {
-		util.LogDebug("pgid:", n.pgid, " inodes=0 ")
+		log.Debug("pgid:", n.pgid, " inodes=0 ")
 		n.parent.del(n.key)
 		n.parent.removeChild(n)
 		delete(n.bindex.nodes, n.pgid)
 		delete(n.bindex.uncommited, n.pgid)
-		util.LogDebug("-----------------------rebalance end--------------------")
+		log.Debug("-----------------------rebalance end--------------------")
 		n.parent.rebalanceAfterDelete()
 		return
 	}
@@ -258,18 +258,18 @@ func (n *node) rebalanceAfterDelete() {
 		target = n.prevSibling()
 	}
 	if target == nil {
-		util.LogDebug("target=nil:", target == nil)
-		util.LogDebug("-----------------------rebalance end--------------------")
+		log.Debug("target=nil:", target == nil)
+		log.Debug("-----------------------rebalance end--------------------")
 		n.parent.rebalanceAfterDelete()
 		return
 	}
 	if target.size()+n.size() > n.bindex.pageSize {
-		util.LogDebug(" size > pageSize:", target.size(), n.size())
-		util.LogDebug("-----------------------rebalance end--------------------")
+		log.Debug(" size > pageSize:", target.size(), n.size())
+		log.Debug("-----------------------rebalance end--------------------")
 		n.parent.rebalanceAfterDelete()
 		return
 	}
-	util.LogDebug("merge:", n.pgid, target.pgid)
+	log.Debug("merge:", n.pgid, target.pgid)
 	if useNextSibling {
 		for _, inode := range target.inodes {
 			if child, ok := n.bindex.nodes[inode.pgid]; ok {
@@ -300,7 +300,7 @@ func (n *node) rebalanceAfterDelete() {
 		n.bindex.uncommited[target.pgid] = target
 	}
 	n.bindex.uncommited[n.parent.pgid] = n.parent
-	util.LogDebug("-----------------------rebalance end--------------------")
+	log.Debug("-----------------------rebalance end--------------------")
 	n.parent.rebalanceAfterDelete()
 }
 
@@ -371,7 +371,7 @@ func (n *node) write() error {
 		copy(b[0:], item.value)
 		b = b[vlen:]
 	}
-	util.LogDebug("n.size:", n.size())
+	log.Debug("n.size:", n.size())
 	p.dump()
 	//ptr := (*[MaxMapSize]byte)(unsafe.Pointer(p))
 	//buff := ptr[:n.bindex.pageSize]

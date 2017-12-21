@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"sort"
 
-	"github.com/tddhit/bindex/util"
+	"github.com/tddhit/tools/log"
 )
 
 type Cursor struct {
@@ -17,9 +17,9 @@ func (c *Cursor) seek(seek []byte) (key []byte, value []byte) {
 	for i := 0; i < len(c.stack); i++ {
 		e := c.stack[i]
 		if e.page != nil {
-			util.LogDebug("seek:", e.page.id)
+			log.Debug("seek:", e.page.id)
 		} else if e.node != nil {
-			util.LogDebug("seek:", e.node.pgid)
+			log.Debug("seek:", e.node.pgid)
 		}
 	}
 	ref := &c.stack[len(c.stack)-1]
@@ -61,7 +61,7 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 	if !exact && index > 0 {
 		index--
 	}
-	util.LogDebug("searchNode:", n, index, string(key))
+	log.Debug("searchNode:", n, index, string(key))
 	c.stack[len(c.stack)-1].index = index
 	c.search(key, n.inodes[index].pgid)
 }

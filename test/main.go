@@ -3,8 +3,9 @@ package main
 import (
 	"strconv"
 
+	"github.com/tddhit/tools/log"
+
 	"github.com/tddhit/bindex"
-	"github.com/tddhit/bindex/util"
 )
 
 func main() {
@@ -13,14 +14,14 @@ func main() {
 		panic(err)
 	}
 	for i := 1; i <= 10000000; i++ {
-		util.LogInfo(string(b.Get([]byte("hello" + strconv.Itoa(i)))))
+		log.Info(string(b.Get([]byte("hello" + strconv.Itoa(i)))))
 	}
 	//for i := 1; i <= 10000000; i++ {
 	//	b.Put([]byte("hello"+strconv.Itoa(i)), []byte("world"+strconv.Itoa(i)))
-	//	util.LogInfo(i)
+	//	log.Info(i)
 	//}
 	//for i := 1; i <= 10000000; i++ {
 	//	b.Delete([]byte("hello" + strconv.Itoa(i)))
-	//	util.LogInfo(i)
+	//	log.Info(i)
 	//}
 }

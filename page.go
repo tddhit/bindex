@@ -3,7 +3,7 @@ package bindex
 import (
 	"unsafe"
 
-	"github.com/tddhit/bindex/util"
+	"github.com/tddhit/tools/log"
 )
 
 const (
@@ -28,19 +28,19 @@ type page struct {
 }
 
 func (p *page) dump() {
-	util.LogDebug("-------------------------")
-	util.LogDebug("pgid:", p.id)
-	util.LogDebug("flag:", p.flags)
-	util.LogDebug("count:", p.count)
+	log.Debug("-------------------------")
+	log.Debug("pgid:", p.id)
+	log.Debug("flag:", p.flags)
+	log.Debug("count:", p.count)
 	for i := 0; i < int(p.count); i++ {
 		if p.flags == LeafPageFlag {
 			elem := p.leafPageElement(uint16(i))
-			util.LogDebug("key:", string(elem.key()))
-			util.LogDebug("value:", string(elem.value()))
+			log.Debug("key:", string(elem.key()))
+			log.Debug("value:", string(elem.value()))
 		} else {
 			elem := p.branchPageElement(uint16(i))
-			util.LogDebug("key:", string(elem.key()))
-			util.LogDebug("pgid:", elem.pgid)
+			log.Debug("key:", string(elem.key()))
+			log.Debug("pgid:", elem.pgid)
 		}
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/tddhit/bindex/util"
+	"github.com/tddhit/tools/log"
 )
 
 var (
@@ -128,7 +128,7 @@ func (b *BIndex) allocPage() pgid {
 	b.mutex.Lock()
 	b.maxPgid++
 	maxPgid := b.maxPgid
-	util.LogDebug("allocPage:", maxPgid)
+	log.Debug("allocPage:", maxPgid)
 	b.mutex.Unlock()
 	return maxPgid
 }
@@ -187,7 +187,7 @@ func (b *BIndex) dump() {
 }
 
 func (b *BIndex) Put(key []byte, value []byte) error {
-	util.LogDebug("Put:", string(key))
+	log.Debug("Put:", string(key))
 	if len(key) == 0 {
 		return ErrKeyRequired
 	} else if len(key) > MaxKeySize {
@@ -203,7 +203,7 @@ func (b *BIndex) Put(key []byte, value []byte) error {
 	n.put(clone, clone, value, 0)
 	n.rebalanceAfterInsert()
 	minNode := b.minNode()
-	util.LogDebug("minNode:", minNode)
+	log.Debug("minNode:", minNode)
 	if len(minNode.inodes) > 0 && bytes.Compare(minNode.inodes[0].key, key) > 0 {
 		b.adjustMinKey(minNode, minNode.inodes[0].key)
 	}
@@ -222,14 +222,14 @@ func (b *BIndex) Get(key []byte) []byte {
 }
 
 func (b *BIndex) Delete(key []byte) error {
-	util.LogDebug("Delete:", string(key))
+	log.Debug("Delete:", string(key))
 	c := b.newCursor()
 	c.seek(key)
 	n := c.node()
 	n.del(key)
 	n.rebalanceAfterDelete()
 	minNode := b.minNode()
-	util.LogDebug("minNode:", minNode)
+	log.Debug("minNode:", minNode)
 	if len(minNode.inodes) > 0 && bytes.Compare(minNode.inodes[0].key, key) > 0 {
 		b.adjustMinKey(minNode, minNode.inodes[0].key)
 	}
@@ -243,7 +243,7 @@ func (b *BIndex) Delete(key []byte) error {
 		if n, ok := b.nodes[pgid]; ok {
 			n.dump()
 		} else {
-			util.LogDebug(pgid, "is not exist b.nodes!")
+			log.Debug(pgid, "is not exist b.nodes!")
 		}
 	}
 	b.commit()
@@ -282,7 +282,7 @@ func (b *BIndex) minNode() *node {
 	for {
 		if n.isLeaf {
 			minNode = n
-			util.LogDebug("minNode:", minNode.pgid)
+			log.Debug("minNode:", minNode.pgid)
 			break
 		} else {
 			n = n.childAt(0)
@@ -300,7 +300,7 @@ func (b *BIndex) adjustMinKey(minNode *node, key []byte) {
 			n = n.parent
 			copy(n.inodes[0].key, key)
 			n.key = n.inodes[0].key
-			util.LogDebug("replace min:", n.pgid, n.inodes)
+			log.Debug("replace min:", n.pgid, n.inodes)
 			b.uncommited[n.pgid] = n
 		}
 	}
@@ -340,7 +340,7 @@ func (b *BIndex) pageNode(id pgid) (*page, *node) {
 }
 
 func (b *BIndex) commit() error {
-	util.LogDebug("commit start:", b.uncommited)
+	log.Debug("commit start:", b.uncommited)
 	buf := make([]byte, b.pageSize)
 	p := b.pageInBuffer(buf, pgid(0))
 	p.id = pgid(0)
@@ -352,28 +352,21 @@ func (b *BIndex) commit() error {
 	m.root = b.root
 	m.maxPgid = b.maxPgid
 	m.checksum = m.sum64()
-	util.LogDebug(p.id, p.flags, p.count, m)
+	log.Debug(p.id, p.flags, p.count, m)
 	if _, err := b.file.WriteAt(buf, 0); err != nil {
 		return err
 	}
 	for _, node := range b.uncommited {
-		util.LogDebug(node)
+		log.Debug(node)
 		node.dereference()
 		node.write()
-		util.LogDebug(node)
+		log.Debug(node)
 	}
 	if err := b.file.Sync(); err != nil {
 		return err
 	}
 	b.uncommited = make(map[pgid]*node)
-	util.LogDebug("commit end")
-	//for i := pgid(1); i <= b.maxPgid; i++ {
-	//	p := b.page(i)
-	//	p.dump()
-	//}
-	//for pgid, _ := range b.nodes {
-	//	util.LogDebug(pgid, string(b.nodes[pgid].key), b.nodes[pgid].inodes)
-	//}
+	log.Debug("commit end")
 	return nil
 }
 

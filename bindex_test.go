@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/tddhit/bindex/util"
+	"github.com/tddhit/tools/log"
 )
 
 func TestBIndex(t *testing.T) {
@@ -19,7 +19,7 @@ func TestBIndex(t *testing.T) {
 	//	b.Delete([]byte("hello" + strconv.Itoa(i)))
 	//}
 	//for i := 1; i <= 111600; i++ {
-	//	util.LogInfo(string(b.Get([]byte("hello" + strconv.Itoa(i)))))
+	//	log.Info(string(b.Get([]byte("hello" + strconv.Itoa(i)))))
 	//}
 	//for i := 1100; i <= 1180; i++ {
 	//	b.Put([]byte("hello"+strconv.Itoa(i)), []byte("world"+strconv.Itoa(i)))
@@ -31,6 +31,6 @@ func TestBIndex(t *testing.T) {
 	//	b.Delete([]byte("hello" + strconv.Itoa(i)))
 	//}
 	//b.Delete([]byte("hello" + strconv.Itoa(20)))
-	//util.LogDebug(string(b.Get([]byte("hello" + strconv.Itoa(20)))))
-	util.LogDebug("")
+	//log.Debug(string(b.Get([]byte("hello" + strconv.Itoa(20)))))
+	log.Debug("")
 }

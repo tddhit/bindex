@@ -386,3 +386,29 @@ func (m *meta) validate() error {
 	}
 	return nil
 }
+
+func (b *BIndex) Traverse() {
+	l := list.New()
+	root := b.node(b.root, nil)
+	if root == nil {
+		return
+	}
+	l.PushBack(root)
+	for {
+		if l.Len() > 0 {
+			e := l.Front()
+			n := e.Value.(*node)
+			if n.isLeaf {
+				n.dump()
+			} else {
+				for i := 0; i < len(n.inodes); i++ {
+					node := b.node(n.inodes[i].pgid, n)
+					l.PushBack(node)
+				}
+			}
+			l.Remove(e)
+		} else {
+			break
+		}
+	}
+}

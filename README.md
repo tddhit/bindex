@@ -1,2 +1,3 @@
 ![](https://raw.githubusercontent.com/tddhit/bindex/master/doc/bindex.png)
-#存储引擎
+# bindex
+基于mmap/B+Tree实现的持久化kv存储

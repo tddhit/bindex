@@ -97,7 +97,16 @@ func New(path string, readOnly bool) (*BIndex, error) {
 }
 
 func (b *BIndex) Close() error {
-	return b.munmap()
+	if err := b.munmap(); err != nil {
+		return err
+	}
+	if err := b.file.Close(); err != nil {
+		return err
+	}
+	if err := b.funlock(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (b *BIndex) munmap() error {

@@ -336,8 +336,9 @@ func (n *node) read(p *page) {
 }
 
 func (n *node) write() error {
-	//buf := n.bindex.pagePool.Get().([]byte)
-	buf := make([]byte, n.bindex.pageSize)
+	buf := n.bindex.pagePool.Get().([]byte)
+	defer n.bindex.pagePool.Put(buf)
+	//buf := make([]byte, n.bindex.pageSize)
 	p := n.bindex.pageInBuffer(buf, pgid(0))
 	p.id = n.pgid
 	if n.isLeaf {
@@ -349,7 +350,7 @@ func (n *node) write() error {
 	if p.count == 0 {
 		//n.bindex.pagePool.Put(buf)
 	}
-	b := (*[MaxMapSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
+	b := (*[maxMapSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
 	for i, item := range n.inodes {
 		if n.isLeaf {
 			elem := p.leafPageElement(uint16(i))
@@ -364,7 +365,7 @@ func (n *node) write() error {
 		}
 		klen, vlen := len(item.key), len(item.value)
 		if len(b) < klen+vlen {
-			b = (*[MaxMapSize]byte)(unsafe.Pointer(&b[0]))[:]
+			b = (*[maxMapSize]byte)(unsafe.Pointer(&b[0]))[:]
 		}
 		copy(b[0:], item.key)
 		b = b[klen:]
@@ -372,11 +373,11 @@ func (n *node) write() error {
 		b = b[vlen:]
 	}
 	log.Debug("n.size:", n.size())
-	p.dump()
-	//ptr := (*[MaxMapSize]byte)(unsafe.Pointer(p))
+	//p.dump()
+	//ptr := (*[maxMapSize]byte)(unsafe.Pointer(p))
 	//buff := ptr[:n.bindex.pageSize]
 	offset := int64(n.pgid) * int64(n.bindex.pageSize)
-	if _, err := n.bindex.file.WriteAt(buf, offset); err != nil {
+	if err := n.bindex.file.WriteAt(buf, offset); err != nil {
 		return err
 	}
 	return nil

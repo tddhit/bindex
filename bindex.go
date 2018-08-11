@@ -7,10 +7,11 @@ import (
 	"hash/fnv"
 	"os"
 	"sync"
-	"syscall"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/tddhit/tools/log"
+	"github.com/tddhit/tools/mmap"
 )
 
 var (
@@ -24,24 +25,20 @@ var (
 )
 
 const (
-	VERSION      = 1
-	MAGIC        = 0xFE1DEBFE
-	MaxMapSize   = 1 << 37 //128G
+	VERSION      = 2
+	MAGIC        = 0x12345678
+	maxMapSize   = 1 << 37 //128G
 	MaxKeySize   = 128
 	MaxValueSize = 128
 )
 
 type BIndex struct {
-	mutex      sync.Mutex
-	dataref    []byte
-	datasz     int
-	data       *[MaxMapSize]byte
-	root       pgid
+	file       *mmap.MmapFile
 	nodes      map[pgid]*node
 	uncommited map[pgid]*node
-	file       *os.File
-	pageSize   int
 	pagePool   sync.Pool
+	pageSize   int
+	root       pgid
 	maxPgid    pgid
 }
 
@@ -54,41 +51,28 @@ type meta struct {
 	checksum uint64
 }
 
-func New(path string, readOnly bool) (*BIndex, error) {
+func New(path string, mode int) (*BIndex, error) {
+	file, err := mmap.New(path, maxMapSize, mode)
+	if err != nil {
+		return nil, err
+	}
 	b := &BIndex{
+		file:       file,
 		nodes:      make(map[pgid]*node),
 		uncommited: make(map[pgid]*node),
+		pageSize:   os.Getpagesize(),
 	}
-	flag := os.O_RDWR
-	if readOnly {
-		flag = os.O_RDONLY
-	}
-	if file, err := os.OpenFile(path, flag|os.O_CREATE, 0666); err != nil {
-		return nil, err
-	} else {
-		b.file = file
-	}
-	if err := b.flock(!readOnly); err != nil {
-		return nil, err
-	}
-	b.pageSize = os.Getpagesize()
-	//b.pageSize = 128
 	b.pagePool = sync.Pool{
 		New: func() interface{} {
 			return make([]byte, b.pageSize)
 		},
 	}
-	if info, err := b.file.Stat(); err != nil {
-		return nil, err
-	} else if info.Size() == 0 {
+	if b.file.Size() == 0 {
 		if err := b.init(); err != nil {
 			return nil, err
 		}
-	} else if info.Size() > MaxMapSize {
+	} else if b.file.Size() > maxMapSize {
 		return nil, ErrFileTooLarge
-	}
-	if err := b.mmap(); err != nil {
-		return nil, err
 	}
 	meta := b.page(0).meta()
 	b.root = meta.root
@@ -97,49 +81,11 @@ func New(path string, readOnly bool) (*BIndex, error) {
 }
 
 func (b *BIndex) Close() error {
-	if err := b.munmap(); err != nil {
-		return err
-	}
-	if err := b.file.Close(); err != nil {
-		return err
-	}
-	if err := b.funlock(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (b *BIndex) munmap() error {
-	if b.dataref == nil {
-		return nil
-	}
-	if err := syscall.Munmap(b.dataref); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (b *BIndex) mmap() error {
-	buf, err := syscall.Mmap(int(b.file.Fd()), 0, MaxMapSize, syscall.PROT_READ, syscall.MAP_SHARED)
-	if err != nil {
-		return err
-	}
-	if _, _, err := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), uintptr(syscall.MADV_RANDOM)); err != 0 {
-		return err
-	}
-	b.dataref = buf
-	b.datasz = MaxMapSize
-	b.data = (*[MaxMapSize]byte)(unsafe.Pointer(&buf[0]))
-	return nil
+	return b.file.Close()
 }
 
 func (b *BIndex) allocPage() pgid {
-	b.mutex.Lock()
-	b.maxPgid++
-	maxPgid := b.maxPgid
-	log.Debug("allocPage:", maxPgid)
-	b.mutex.Unlock()
-	return maxPgid
+	return pgid(atomic.AddUint64((*uint64)(unsafe.Pointer(&b.maxPgid)), 1))
 }
 
 func (b *BIndex) init() error {
@@ -160,7 +106,7 @@ func (b *BIndex) init() error {
 	p.flags = LeafPageFlag
 	p.count = 0
 
-	if _, err := b.file.WriteAt(buf, 0); err != nil {
+	if err := b.file.WriteAt(buf, 0); err != nil {
 		return err
 	}
 	if err := b.file.Sync(); err != nil {
@@ -259,24 +205,6 @@ func (b *BIndex) Delete(key []byte) error {
 	return nil
 }
 
-func (b *BIndex) flock(exclusive bool) error {
-	flag := syscall.LOCK_SH
-	if exclusive {
-		flag = syscall.LOCK_EX
-	}
-	err := syscall.Flock(int(b.file.Fd()), flag|syscall.LOCK_NB)
-	if err == nil {
-		return nil
-	} else if err != syscall.EWOULDBLOCK {
-		return err
-	}
-	return nil
-}
-
-func (b *BIndex) funlock() error {
-	return syscall.Flock(int(b.file.Fd()), syscall.LOCK_UN)
-}
-
 func (b *BIndex) newCursor() *Cursor {
 	c := &Cursor{
 		bindex: b,
@@ -336,7 +264,7 @@ func (b *BIndex) node(pgid pgid, parent *node) *node {
 
 func (b *BIndex) page(id pgid) *page {
 	pos := id * pgid(b.pageSize)
-	return (*page)(unsafe.Pointer(&b.data[pos]))
+	return (*page)(b.file.Buf(int64(pos)))
 }
 
 func (b *BIndex) pageNode(id pgid) (*page, *node) {
@@ -350,7 +278,8 @@ func (b *BIndex) pageNode(id pgid) (*page, *node) {
 
 func (b *BIndex) commit() error {
 	log.Debug("commit start:", b.uncommited)
-	buf := make([]byte, b.pageSize)
+	//buf := make([]byte, b.pageSize)
+	buf := b.pagePool.Get().([]byte)
 	p := b.pageInBuffer(buf, pgid(0))
 	p.id = pgid(0)
 	p.flags = MetaPageFlag
@@ -361,13 +290,14 @@ func (b *BIndex) commit() error {
 	m.root = b.root
 	m.maxPgid = b.maxPgid
 	m.checksum = m.sum64()
-	log.Debug(p.id, p.flags, p.count, m)
-	if _, err := b.file.WriteAt(buf, 0); err != nil {
+	if err := b.file.WriteAt(buf, 0); err != nil {
+		b.pagePool.Put(buf)
 		return err
 	}
+	b.pagePool.Put(buf)
 	for _, node := range b.uncommited {
 		log.Debug(node)
-		node.dereference()
+		//node.dereference()
 		node.write()
 		log.Debug(node)
 	}

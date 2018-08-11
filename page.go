@@ -85,8 +85,8 @@ type branchPageElement struct {
 }
 
 func (n *branchPageElement) key() []byte {
-	buf := (*[MaxMapSize]byte)(unsafe.Pointer(n))
-	return (*[MaxMapSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize]
+	buf := (*[maxMapSize]byte)(unsafe.Pointer(n))
+	return (*[maxMapSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize]
 }
 
 type leafPageElement struct {
@@ -96,11 +96,11 @@ type leafPageElement struct {
 }
 
 func (n *leafPageElement) key() []byte {
-	buf := (*[MaxMapSize]byte)(unsafe.Pointer(n))
-	return (*[MaxMapSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize:n.ksize]
+	buf := (*[maxMapSize]byte)(unsafe.Pointer(n))
+	return (*[maxMapSize]byte)(unsafe.Pointer(&buf[n.pos]))[:n.ksize:n.ksize]
 }
 
 func (n *leafPageElement) value() []byte {
-	buf := (*[MaxMapSize]byte)(unsafe.Pointer(n))
-	return (*[MaxMapSize]byte)(unsafe.Pointer(&buf[n.pos+n.ksize]))[:n.vsize:n.vsize]
+	buf := (*[maxMapSize]byte)(unsafe.Pointer(n))
+	return (*[maxMapSize]byte)(unsafe.Pointer(&buf[n.pos+n.ksize]))[:n.vsize:n.vsize]
 }

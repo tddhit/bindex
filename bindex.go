@@ -51,8 +51,8 @@ type meta struct {
 	checksum uint64
 }
 
-func New(path string, mode int) (*BIndex, error) {
-	file, err := mmap.New(path, maxMapSize, mode)
+func New(path string, mode, advise int) (*BIndex, error) {
+	file, err := mmap.New(path, maxMapSize, mode, advise)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (b *BIndex) Put(key []byte, value []byte) error {
 	} else if int64(len(value)) > MaxValueSize {
 		return ErrValueTooLarge
 	}
-	c := b.newCursor()
+	c := b.NewCursor()
 	c.seek(key)
 	var clone = make([]byte, len(key))
 	copy(clone, key)
@@ -167,7 +167,7 @@ func (b *BIndex) Put(key []byte, value []byte) error {
 }
 
 func (b *BIndex) Get(key []byte) []byte {
-	c := b.newCursor()
+	c := b.NewCursor()
 	b.dump()
 	k, v := c.seek(key)
 	if !bytes.Equal(key, k) {
@@ -178,7 +178,7 @@ func (b *BIndex) Get(key []byte) []byte {
 
 func (b *BIndex) Delete(key []byte) error {
 	log.Debug("Delete:", string(key))
-	c := b.newCursor()
+	c := b.NewCursor()
 	c.seek(key)
 	n := c.node()
 	n.del(key)
@@ -205,7 +205,7 @@ func (b *BIndex) Delete(key []byte) error {
 	return nil
 }
 
-func (b *BIndex) newCursor() *Cursor {
+func (b *BIndex) NewCursor() *Cursor {
 	c := &Cursor{
 		bindex: b,
 		stack:  make([]elemRef, 0),

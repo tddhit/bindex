@@ -114,6 +114,113 @@ func (c *Cursor) node() *node {
 	return n
 }
 
+func (c *Cursor) First() ([]byte, []byte) {
+	c.stack = c.stack[:0]
+	p, n := c.bindex.pageNode(c.bindex.root)
+	c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
+	c.first()
+	ref := &c.stack[len(c.stack)-1]
+	if ref.count() == 0 {
+		return nil, nil
+	}
+	if ref.node != nil {
+		inode := &ref.node.inodes[ref.index]
+		return inode.key, inode.value
+	}
+	elem := ref.page.leafPageElement(uint16(ref.index))
+	return elem.key(), elem.value()
+}
+
+func (c *Cursor) first() {
+	for {
+		var ref = &c.stack[len(c.stack)-1]
+		if ref.isLeaf() {
+			break
+		}
+		var pgid pgid
+		if ref.node != nil {
+			pgid = ref.node.inodes[ref.index].pgid
+		} else {
+			pgid = ref.page.branchPageElement(uint16(ref.index)).pgid
+		}
+		p, n := c.bindex.pageNode(pgid)
+		c.stack = append(c.stack, elemRef{page: p, node: n, index: 0})
+	}
+}
+
+func (c *Cursor) Last() ([]byte, []byte) {
+	c.stack = c.stack[:0]
+	p, n := c.bindex.pageNode(c.bindex.root)
+	ref := elemRef{page: p, node: n}
+	ref.index = ref.count() - 1
+	c.stack = append(c.stack, ref)
+	c.last()
+	ref = c.stack[len(c.stack)-1]
+	if ref.count() == 0 {
+		return nil, nil
+	}
+	if ref.node != nil {
+		inode := &ref.node.inodes[ref.index]
+		return inode.key, inode.value
+	}
+	elem := ref.page.leafPageElement(uint16(ref.index))
+	return elem.key(), elem.value()
+}
+
+func (c *Cursor) last() {
+	for {
+		ref := &c.stack[len(c.stack)-1]
+		if ref.isLeaf() {
+			break
+		}
+		var pgid pgid
+		if ref.node != nil {
+			pgid = ref.node.inodes[ref.index].pgid
+		} else {
+			pgid = ref.page.branchPageElement(uint16(ref.index)).pgid
+		}
+		p, n := c.bindex.pageNode(pgid)
+		var nextRef = elemRef{page: p, node: n}
+		nextRef.index = nextRef.count() - 1
+		c.stack = append(c.stack, nextRef)
+	}
+}
+
+func (c *Cursor) Next() ([]byte, []byte) {
+	return c.next()
+}
+
+func (c *Cursor) next() (key []byte, value []byte) {
+	for {
+		var i int
+		for i = len(c.stack) - 1; i >= 0; i-- {
+			elem := &c.stack[i]
+			if elem.index < elem.count()-1 {
+				elem.index++
+				break
+			}
+		}
+		if i == -1 {
+			return nil, nil
+		}
+		c.stack = c.stack[:i+1]
+		c.first()
+		if c.stack[len(c.stack)-1].count() == 0 {
+			continue
+		}
+		ref := &c.stack[len(c.stack)-1]
+		if ref.count() == 0 || ref.index >= ref.count() {
+			return nil, nil
+		}
+		if ref.node != nil {
+			inode := &ref.node.inodes[ref.index]
+			return inode.key, inode.value
+		}
+		elem := ref.page.leafPageElement(uint16(ref.index))
+		return elem.key(), elem.value()
+	}
+}
+
 type elemRef struct {
 	page  *page
 	node  *node

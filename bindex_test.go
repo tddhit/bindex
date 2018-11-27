@@ -24,7 +24,9 @@ func TestBIndex(t *testing.T) {
 	//	log.Info(string(b.Get([]byte("hello" + strconv.Itoa(i)))))
 	//}
 	c := b.NewCursor()
-	k, v := c.First()
+	k, v := c.Next()
+	log.Info(string(k), string(v))
+	k, v = c.First()
 	log.Info(string(k), string(v))
 	k, v = c.Last()
 	log.Info(string(k), string(v))

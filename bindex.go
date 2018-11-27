@@ -40,6 +40,7 @@ type BIndex struct {
 	pageSize   int
 	root       pgid
 	maxPgid    pgid
+	rwlock     sync.RWMutex
 }
 
 type meta struct {
@@ -81,6 +82,9 @@ func New(path string, mode, advise int) (*BIndex, error) {
 }
 
 func (b *BIndex) Close() error {
+	b.rwlock.Lock()
+	defer b.rwlock.Unlock()
+
 	return b.file.Close()
 }
 
@@ -142,7 +146,9 @@ func (b *BIndex) dump() {
 }
 
 func (b *BIndex) Put(key []byte, value []byte) error {
-	log.Debug("Put:", string(key))
+	b.rwlock.Lock()
+	defer b.rwlock.Unlock()
+
 	if len(key) == 0 {
 		return ErrKeyRequired
 	} else if len(key) > MaxKeySize {
@@ -158,7 +164,6 @@ func (b *BIndex) Put(key []byte, value []byte) error {
 	n.put(clone, clone, value, 0)
 	n.rebalanceAfterInsert()
 	minNode := b.minNode()
-	log.Debug("minNode:", minNode)
 	if len(minNode.inodes) > 0 && bytes.Compare(minNode.inodes[0].key, key) > 0 {
 		b.adjustMinKey(minNode, minNode.inodes[0].key)
 	}
@@ -167,8 +172,11 @@ func (b *BIndex) Put(key []byte, value []byte) error {
 }
 
 func (b *BIndex) Get(key []byte) []byte {
+	b.rwlock.RLock()
+	defer b.rwlock.RUnlock()
+
 	c := b.NewCursor()
-	b.dump()
+	//b.dump()
 	k, v := c.seek(key)
 	if !bytes.Equal(key, k) {
 		return nil
@@ -177,14 +185,15 @@ func (b *BIndex) Get(key []byte) []byte {
 }
 
 func (b *BIndex) Delete(key []byte) error {
-	log.Debug("Delete:", string(key))
+	b.rwlock.Lock()
+	defer b.rwlock.Unlock()
+
 	c := b.NewCursor()
 	c.seek(key)
 	n := c.node()
 	n.del(key)
 	n.rebalanceAfterDelete()
 	minNode := b.minNode()
-	log.Debug("minNode:", minNode)
 	if len(minNode.inodes) > 0 && bytes.Compare(minNode.inodes[0].key, key) > 0 {
 		b.adjustMinKey(minNode, minNode.inodes[0].key)
 	}
@@ -219,7 +228,6 @@ func (b *BIndex) minNode() *node {
 	for {
 		if n.isLeaf {
 			minNode = n
-			log.Debug("minNode:", minNode.pgid)
 			break
 		} else {
 			n = n.childAt(0)
@@ -237,7 +245,6 @@ func (b *BIndex) adjustMinKey(minNode *node, key []byte) {
 			n = n.parent
 			copy(n.inodes[0].key, key)
 			n.key = n.inodes[0].key
-			log.Debug("replace min:", n.pgid, n.inodes)
 			b.uncommited[n.pgid] = n
 		}
 	}
@@ -277,7 +284,6 @@ func (b *BIndex) pageNode(id pgid) (*page, *node) {
 }
 
 func (b *BIndex) commit() error {
-	log.Debug("commit start:", b.uncommited)
 	//buf := make([]byte, b.pageSize)
 	buf := b.pagePool.Get().([]byte)
 	p := b.pageInBuffer(buf, pgid(0))
@@ -296,16 +302,13 @@ func (b *BIndex) commit() error {
 	}
 	b.pagePool.Put(buf)
 	for _, node := range b.uncommited {
-		log.Debug(node)
 		//node.dereference()
 		node.write()
-		log.Debug(node)
 	}
 	if err := b.file.Sync(); err != nil {
 		return err
 	}
 	b.uncommited = make(map[pgid]*node)
-	log.Debug("commit end")
 	return nil
 }
 

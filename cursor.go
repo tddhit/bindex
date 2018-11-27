@@ -3,8 +3,6 @@ package bindex
 import (
 	"bytes"
 	"sort"
-
-	"github.com/tddhit/tools/log"
 )
 
 type Cursor struct {
@@ -14,14 +12,9 @@ type Cursor struct {
 
 func (c *Cursor) seek(seek []byte) (key []byte, value []byte) {
 	c.search(seek, c.bindex.root)
-	for i := 0; i < len(c.stack); i++ {
-		e := c.stack[i]
-		if e.page != nil {
-			log.Debug("seek:", e.page.id)
-		} else if e.node != nil {
-			log.Debug("seek:", e.node.pgid)
-		}
-	}
+	//for i := 0; i < len(c.stack); i++ {
+	//	e := c.stack[i]
+	//}
 	ref := &c.stack[len(c.stack)-1]
 	if ref.count() == 0 || ref.index >= ref.count() {
 		return nil, nil
@@ -61,7 +54,6 @@ func (c *Cursor) searchNode(key []byte, n *node) {
 	if !exact && index > 0 {
 		index--
 	}
-	log.Debug("searchNode:", n, index, string(key))
 	c.stack[len(c.stack)-1].index = index
 	c.search(key, n.inodes[index].pgid)
 }
